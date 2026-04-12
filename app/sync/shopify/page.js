@@ -1,113 +1,64 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { importShopifyOrders } from '../../lib/storage';
-
-const cardStyle = {
-  border: '1px solid #e5e7eb',
-  borderRadius: 10,
-  background: '#fff',
-  padding: 14
-};
-
-const buttonStyle = {
-  width: 'fit-content',
-  padding: '10px 14px',
-  borderRadius: 8,
-  border: '1px solid #d1d5db',
-  background: '#fff',
-  fontWeight: 700,
-  cursor: 'pointer'
-};
 
 export default function ShopifySyncPage() {
   const [shopifyOrders, setShopifyOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
-
   const canImport = useMemo(() => shopifyOrders.length > 0, [shopifyOrders.length]);
 
   const handleFetch = async () => {
     setLoading(true);
     setStatus({ type: '', message: '' });
-
     try {
       const response = await fetch('/api/shopify/orders?limit=30', { cache: 'no-store' });
       const payload = await response.json();
-
       if (!response.ok || !payload.ok) {
         setShopifyOrders([]);
-        setStatus({ type: 'error', message: payload.error || 'Unable to fetch Shopify orders.' });
+        setStatus({ type: 'error', message: payload.error || 'Unable to fetch Shopify orders. Check Shopify env settings in Settings.' });
         return;
       }
-
       setShopifyOrders(payload.orders || []);
-      setStatus({ type: 'success', message: `Fetched ${payload.orders.length} recent Shopify orders.` });
+      setStatus({ type: 'success', message: `Fetched ${payload.orders.length} Shopify orders.` });
     } catch {
       setShopifyOrders([]);
       setStatus({ type: 'error', message: 'Unexpected error while fetching Shopify orders.' });
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const handleImport = () => {
     const result = importShopifyOrders(shopifyOrders);
-
-    setStatus({
-      type: 'success',
-      message: `Imported ${result.importedCount} orders. Skipped ${result.skippedCount} duplicate(s).`
-    });
+    setStatus({ type: 'success', message: `Imported ${result.importedCount} orders. Skipped ${result.skippedCount} duplicates.` });
   };
 
   return (
-    <main style={{ maxWidth: 960, margin: '0 auto', display: 'grid', gap: 12 }}>
-      <header>
-        <h1 style={{ marginBottom: 8 }}>Shopify Sync</h1>
-        <p style={{ margin: 0, color: '#4b5563' }}>Pull Shopify orders into MSH Operations Hub (read-only Shopify integration).</p>
-      </header>
-
-      <section style={{ ...cardStyle, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <button type="button" onClick={handleFetch} disabled={loading} style={buttonStyle}>
-          {loading ? 'Fetching…' : 'Fetch Recent Shopify Orders'}
-        </button>
-        <button type="button" onClick={handleImport} disabled={!canImport} style={buttonStyle}>
-          Import into Hub
-        </button>
+    <main className="page-wrap">
+      <header className="page-head"><h1>Shopify Sync</h1><p>Read-only Shopify import. Fetch, review, and bring orders into the hub with duplicate protection.</p></header>
+      <section className="card btn-row">
+        <button type="button" className="btn" onClick={handleFetch} disabled={loading}>{loading ? 'Fetching…' : 'Fetch Recent Shopify Orders'}</button>
+        <button type="button" className="btn primary" onClick={handleImport} disabled={!canImport}>Import into Hub</button>
+        <Link href="/orders?sourceSystem=shopify" className="btn">View Shopify Orders</Link>
       </section>
+      {status.message ? <p className="card" style={{ margin: 0, borderColor: status.type === 'error' ? '#fca5a5' : 'var(--border)' }}>{status.message}</p> : null}
 
-      {status.message ? (
-        <p
-          style={{
-            margin: 0,
-            padding: 12,
-            borderRadius: 8,
-            border: status.type === 'error' ? '1px solid #fca5a5' : '1px solid #86efac',
-            background: status.type === 'error' ? '#fef2f2' : '#f0fdf4'
-          }}
-        >
-          {status.message}
-        </p>
-      ) : null}
-
-      <section style={{ ...cardStyle, display: 'grid', gap: 10 }}>
-        <h2 style={{ margin: 0 }}>Preview</h2>
-        {shopifyOrders.length === 0 ? (
-          <p style={{ margin: 0, color: '#6b7280' }}>No Shopify orders loaded yet.</p>
-        ) : (
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 8 }}>
+      <section className="card">
+        <h2>Fetched Order Preview</h2>
+        {shopifyOrders.length === 0 ? <p style={{ margin: 0 }}>No Shopify orders loaded.</p> : (
+          <ul className="status-list">
             {shopifyOrders.map(order => (
-              <li key={order.id} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 10 }}>
-                <p style={{ margin: 0, fontWeight: 700 }}>{order.orderNumber}</p>
-                <p style={{ margin: '4px 0', fontSize: 14 }}>{order.customerName}</p>
-                <p style={{ margin: '4px 0', fontSize: 13, color: '#4b5563' }}>Source: {order.sourceLabel}</p>
-                <p style={{ margin: '4px 0', fontSize: 13, color: '#4b5563' }}>Items: {order.lineItemsSummary || 'No line items available'}</p>
-                <p style={{ margin: '4px 0', fontSize: 13, color: '#4b5563' }}>Contact: {order.customerEmail || 'No email'} · {order.customerPhone || 'No phone'}</p>
+              <li key={order.id} className="card">
+                <strong>{order.orderNumber}</strong> <span className="badge">Source: Shopify/Web</span>
+                <div style={{ color: 'var(--muted)', marginTop: 4 }}>{order.customerName} · {order.customerEmail || 'No email'} · {order.customerPhone || 'No phone'}</div>
+                <div style={{ color: 'var(--muted)', marginTop: 4 }}>Items: {order.lineItemsSummary || 'No line items available'}</div>
               </li>
             ))}
           </ul>
         )}
       </section>
+      <p style={{ color: 'var(--muted)', margin: 0 }}>TODO: add scheduled Shopify auto-import and notification hooks after manual workflow sign-off.</p>
     </main>
   );
 }

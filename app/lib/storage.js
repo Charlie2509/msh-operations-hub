@@ -5,6 +5,7 @@ import { normalizeOrder } from './order-utils';
 
 const ORDERS_KEY = 'msh_orders_v1';
 const DELIVERIES_KEY = 'msh_deliveries_v1';
+const HUB_EVENT = 'msh-hub-updated';
 
 const isBrowser = typeof window !== 'undefined';
 
@@ -20,8 +21,15 @@ function normalizeOrdersCollection(rawOrders) {
   return rawOrders.map((order, index) => normalizeOrder(order, index));
 }
 
+function emitHubUpdated() {
+  if (isBrowser) {
+    window.dispatchEvent(new Event(HUB_EVENT));
+  }
+}
+
 function persistOrders(orders) {
   window.localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
+  emitHubUpdated();
 }
 
 export function getOrders() {
@@ -44,10 +52,7 @@ export function getOrders() {
 }
 
 export function saveOrders(nextOrders) {
-  if (!isBrowser) {
-    return;
-  }
-
+  if (!isBrowser) return;
   persistOrders(normalizeOrdersCollection(nextOrders));
 }
 
@@ -86,9 +91,7 @@ export function importShopifyOrders(shopifyOrders) {
     const externalKey = order.externalId ? `external:${order.externalId}` : '';
     const orderNumberKey = order.orderNumber ? `number:${order.orderNumber}` : '';
 
-    if ((externalKey && dedupeSet.has(externalKey)) || (orderNumberKey && dedupeSet.has(orderNumberKey))) {
-      continue;
-    }
+    if ((externalKey && dedupeSet.has(externalKey)) || (orderNumberKey && dedupeSet.has(orderNumberKey))) continue;
 
     uniqueImports.push(normalizeOrder({ ...order, sourceSystem: 'shopify', sourceLabel: 'Shopify/Web' }));
     if (externalKey) dedupeSet.add(externalKey);
@@ -130,9 +133,7 @@ export function updateOrder(orderId, updates) {
 }
 
 export function getDeliveries() {
-  if (!isBrowser) {
-    return [];
-  }
+  if (!isBrowser) return [];
 
   const stored = window.localStorage.getItem(DELIVERIES_KEY);
 
@@ -142,17 +143,13 @@ export function getDeliveries() {
   }
 
   const parsed = safeParse(stored, []);
-  return parsed.map(delivery => ({
-    ...delivery,
-    items: Array.isArray(delivery.items) ? delivery.items : []
-  }));
+  return parsed.map(delivery => ({ ...delivery, items: Array.isArray(delivery.items) ? delivery.items : [] }));
 }
 
 export function saveDeliveries(deliveries) {
-  if (!isBrowser) {
-    return;
-  }
+  if (!isBrowser) return;
   window.localStorage.setItem(DELIVERIES_KEY, JSON.stringify(deliveries));
+  emitHubUpdated();
 }
 
 export function createDelivery(deliveryInput) {
@@ -175,4 +172,15 @@ export function updateDelivery(deliveryId, updates) {
   const updated = allDeliveries.map(delivery => (delivery.id === deliveryId ? { ...delivery, ...updates } : delivery));
   saveDeliveries(updated);
   return updated.find(delivery => delivery.id === deliveryId) || null;
+}
+
+export function subscribeHubUpdates(callback) {
+  if (!isBrowser) return () => {};
+  const handler = () => callback();
+  window.addEventListener(HUB_EVENT, handler);
+  window.addEventListener('storage', handler);
+  return () => {
+    window.removeEventListener(HUB_EVENT, handler);
+    window.removeEventListener('storage', handler);
+  };
 }
