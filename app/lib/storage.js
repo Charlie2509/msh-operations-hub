@@ -1,5 +1,6 @@
 'use client';
 
+import { deliveries as seededDeliveries } from '../data/deliveries';
 import { orders as seededOrders } from '../data/orders';
 import { normalizeOrder } from './order-utils';
 
@@ -19,6 +20,33 @@ function safeParse(value, fallback) {
 
 function normalizeOrdersCollection(rawOrders) {
   return rawOrders.map((order, index) => normalizeOrder(order, index));
+}
+
+
+function normalizeDeliveryItem(item, index) {
+  return {
+    id: item.id || `d-item-${Date.now()}-${index}`,
+    name: item.name || '',
+    size: item.size || '',
+    quantity: Number(item.quantity || 1),
+    club: item.club || '',
+    matchedOrderId: item.matchedOrderId || '',
+    matchedQuantity: Number(item.matchedQuantity || 0)
+  };
+}
+
+function normalizeDeliveriesCollection(rawDeliveries) {
+  return rawDeliveries.map((delivery, index) => ({
+    id: delivery.id || `delivery-${Date.now()}-${index}`,
+    reference: delivery.reference || `DEL-${index + 1}`,
+    deliveryDate: delivery.deliveryDate || '',
+    notes: delivery.notes || '',
+    customsHold: delivery.customsHold === 'Yes' ? 'Yes' : 'No',
+    partialDelivery: delivery.partialDelivery === 'Yes' ? 'Yes' : 'No',
+    status: delivery.status || 'Unmatched',
+    createdAt: delivery.createdAt || new Date().toISOString(),
+    items: Array.isArray(delivery.items) ? delivery.items.map(normalizeDeliveryItem) : []
+  }));
 }
 
 function emitHubUpdated() {
@@ -133,22 +161,27 @@ export function updateOrder(orderId, updates) {
 }
 
 export function getDeliveries() {
-  if (!isBrowser) return [];
+  if (!isBrowser) {
+    return normalizeDeliveriesCollection(seededDeliveries);
+  }
 
   const stored = window.localStorage.getItem(DELIVERIES_KEY);
 
   if (!stored) {
-    window.localStorage.setItem(DELIVERIES_KEY, JSON.stringify([]));
-    return [];
+    const normalizedSeed = normalizeDeliveriesCollection(seededDeliveries);
+    saveDeliveries(normalizedSeed);
+    return normalizedSeed;
   }
 
-  const parsed = safeParse(stored, []);
-  return parsed.map(delivery => ({ ...delivery, items: Array.isArray(delivery.items) ? delivery.items : [] }));
+  const parsed = safeParse(stored, seededDeliveries);
+  const normalized = normalizeDeliveriesCollection(parsed);
+  saveDeliveries(normalized);
+  return normalized;
 }
 
 export function saveDeliveries(deliveries) {
   if (!isBrowser) return;
-  window.localStorage.setItem(DELIVERIES_KEY, JSON.stringify(deliveries));
+  window.localStorage.setItem(DELIVERIES_KEY, JSON.stringify(normalizeDeliveriesCollection(deliveries)));
   emitHubUpdated();
 }
 
