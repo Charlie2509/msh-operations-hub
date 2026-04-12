@@ -9,9 +9,12 @@ const navLinks = [
   { href: '/', label: 'Dashboard' },
   { href: '/orders', label: 'Orders' },
   { href: '/orders/new', label: 'Add Order' },
+  { href: '/sync/shopify', label: 'Shopify Sync' },
   { href: '/deliveries', label: 'Deliveries' },
   { href: '/production', label: 'Production' },
-  { href: '/boxes', label: 'Boxes' }
+  { href: '/shipping', label: 'Shipping' },
+  { href: '/boxes', label: 'Boxes' },
+  { href: '/settings', label: 'Settings' }
 ];
 
 export default function RootLayout({ children }) {

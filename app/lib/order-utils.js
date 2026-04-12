@@ -47,9 +47,19 @@ export function normalizeOrder(order, index = 0) {
     : parseLegacyMissingItems(order.missingItems);
 
   const hasOpenMissing = structuredItems.some(item => !item.fulfilled);
+  const nowIso = new Date().toISOString();
 
   return {
     ...order,
+    id: order?.id || `local-${Date.now()}-${index}`,
+    orderNumber: order?.orderNumber || `LOCAL-${String(index + 1).padStart(4, '0')}`,
+    customerName: order?.customerName || 'Unknown Customer',
+    sourceSystem: order?.sourceSystem || 'manual',
+    externalId: order?.externalId || '',
+    lineItemsSummary: order?.lineItemsSummary || '',
+    sourceLabel: order?.sourceLabel || (order?.sourceSystem === 'shopify' ? 'Shopify/Web' : 'Manual'),
+    createdAt: order?.createdAt || nowIso,
+    updatedAt: order?.updatedAt || order?.createdAt || nowIso,
     missingItems: structuredItems,
     legacyMissingItemsText: typeof order.missingItems === 'string' ? order.missingItems : order.legacyMissingItemsText || '',
     deliveryTracking: Array.isArray(order.deliveryTracking) ? order.deliveryTracking : [],

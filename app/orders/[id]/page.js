@@ -22,6 +22,13 @@ const quickStatuses = [
   'Completed'
 ];
 
+function formatDateTime(isoString) {
+  if (!isoString) return '—';
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString();
+}
+
 export default function OrderDetail() {
   const params = useParams();
   const [order, setOrder] = useState(null);
@@ -125,6 +132,15 @@ export default function OrderDetail() {
         </section>
       ) : (
         <>
+          <section style={cardStyle}>
+            <h2 style={{ marginTop: 0 }}>Source & Import Metadata</h2>
+            <p><strong>Source System:</strong> {order.sourceSystem || 'manual'}</p>
+            <p><strong>External ID:</strong> {order.externalId || '—'}</p>
+            <p><strong>Line Items Summary:</strong> {order.lineItemsSummary || '—'}</p>
+            <p><strong>Created:</strong> {formatDateTime(order.createdAt)}</p>
+            <p><strong>Last Updated:</strong> {formatDateTime(order.updatedAt)}</p>
+          </section>
+
           <section style={cardStyle}>
             <h2 style={{ marginTop: 0 }}>Customer</h2>
             <p><strong>Name:</strong> {order.customerName}</p>
