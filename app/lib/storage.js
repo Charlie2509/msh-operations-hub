@@ -53,10 +53,16 @@ export function saveOrders(nextOrders) {
 
 export function createOrder(orderInput) {
   const allOrders = getOrders();
+  const now = new Date().toISOString();
   const nextOrder = normalizeOrder(
     {
       id: `local-${Date.now()}`,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
+      sourceSystem: 'manual',
+      externalId: '',
+      lineItemsSummary: '',
+      sourceLabel: 'Manual',
       ...orderInput,
       boxNumber: Number(orderInput.boxNumber)
     },
@@ -68,6 +74,41 @@ export function createOrder(orderInput) {
   return nextOrder;
 }
 
+export function importShopifyOrders(shopifyOrders) {
+  const allOrders = getOrders();
+
+  const dedupeSet = new Set(
+    allOrders.flatMap(order => [order.externalId ? `external:${order.externalId}` : '', order.orderNumber ? `number:${order.orderNumber}` : ''])
+  );
+
+  const uniqueImports = [];
+  for (const order of shopifyOrders || []) {
+    const externalKey = order.externalId ? `external:${order.externalId}` : '';
+    const orderNumberKey = order.orderNumber ? `number:${order.orderNumber}` : '';
+
+    if ((externalKey && dedupeSet.has(externalKey)) || (orderNumberKey && dedupeSet.has(orderNumberKey))) {
+      continue;
+    }
+
+    uniqueImports.push(normalizeOrder({ ...order, sourceSystem: 'shopify', sourceLabel: 'Shopify/Web' }));
+    if (externalKey) dedupeSet.add(externalKey);
+    if (orderNumberKey) dedupeSet.add(orderNumberKey);
+  }
+
+  if (uniqueImports.length === 0) {
+    return { importedCount: 0, skippedCount: (shopifyOrders || []).length, orders: allOrders };
+  }
+
+  const updated = [...uniqueImports, ...allOrders];
+  saveOrders(updated);
+
+  return {
+    importedCount: uniqueImports.length,
+    skippedCount: (shopifyOrders || []).length - uniqueImports.length,
+    orders: updated
+  };
+}
+
 export function updateOrder(orderId, updates) {
   const allOrders = getOrders();
   const updated = allOrders.map(order =>
@@ -76,6 +117,7 @@ export function updateOrder(orderId, updates) {
           {
             ...order,
             ...updates,
+            updatedAt: new Date().toISOString(),
             boxNumber: Number(updates.boxNumber ?? order.boxNumber)
           },
           0
