@@ -7,6 +7,7 @@ import {
   ORDER_TYPES,
   PAYMENT_STATUSES
 } from '../../data/orders';
+import { normalizeMissingItem, parseLegacyMissingItems } from '../../lib/order-utils';
 
 const boxTypeOptions = Object.keys(BOX_TYPES);
 
@@ -18,6 +19,18 @@ const fieldStyle = {
   fontSize: 14,
   background: '#fff'
 };
+
+function getMissingItemsFromOverrides(overrides) {
+  if (Array.isArray(overrides.missingItems)) {
+    return overrides.missingItems.map((item, index) => normalizeMissingItem(item, index));
+  }
+
+  if (typeof overrides.missingItems === 'string') {
+    return parseLegacyMissingItems(overrides.missingItems);
+  }
+
+  return [];
+}
 
 export function getInitialOrderForm(overrides = {}) {
   const defaultBoxType = boxTypeOptions[0];
@@ -34,17 +47,18 @@ export function getInitialOrderForm(overrides = {}) {
     boxType: defaultBoxType,
     boxNumber: String(BOX_TYPES[defaultBoxType][0]),
     personalisationDetails: '',
-    missingItems: '',
+    missingItems: [],
     internalNotes: '',
     needsOrderingFromMacron: 'No',
     deliveryStatus: DELIVERY_STATUSES[0],
     paymentStatus: PAYMENT_STATUSES[0],
     ...overrides,
+    missingItems: getMissingItemsFromOverrides(overrides),
     boxNumber: String(overrides.boxNumber || BOX_TYPES[overrides.boxType || defaultBoxType][0])
   };
 }
 
-export default function OrderForm({ formData, onChange, onSubmit, submitLabel }) {
+export default function OrderForm({ formData, onChange, onSubmit, submitLabel, onMissingItemsChange }) {
   const boxNumbers = BOX_TYPES[formData.boxType] || [];
 
   return (
@@ -97,27 +111,111 @@ export default function OrderForm({ formData, onChange, onSubmit, submitLabel })
         value={formData.personalisationDetails}
         onChange={onChange}
       />
-      <FormField as="textarea" label="Missing Items" name="missingItems" value={formData.missingItems} onChange={onChange} />
+
+      <section style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12, display: 'grid', gap: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <h3 style={{ margin: 0, fontSize: 16 }}>Missing Items</h3>
+          <button
+            type="button"
+            onClick={() => onMissingItemsChange(prev => [...prev, normalizeMissingItem({}, prev.length)])}
+            style={smallButtonStyle}
+          >
+            + Add Missing Item
+          </button>
+        </div>
+
+        {formData.missingItems.length === 0 ? (
+          <p style={{ margin: 0, color: '#6b7280' }}>No missing items logged.</p>
+        ) : (
+          formData.missingItems.map((item, index) => (
+            <div key={item.id || index} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 10, display: 'grid', gap: 8 }}>
+              <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
+                <FormField
+                  label="Product"
+                  name={`missing-name-${index}`}
+                  value={item.name}
+                  onChange={event => {
+                    const next = [...formData.missingItems];
+                    next[index] = { ...next[index], name: event.target.value };
+                    onMissingItemsChange(next);
+                  }}
+                />
+                <FormField
+                  label="Size"
+                  name={`missing-size-${index}`}
+                  value={item.size}
+                  onChange={event => {
+                    const next = [...formData.missingItems];
+                    next[index] = { ...next[index], size: event.target.value };
+                    onMissingItemsChange(next);
+                  }}
+                />
+                <FormField
+                  label="Qty"
+                  type="number"
+                  min="1"
+                  name={`missing-qty-${index}`}
+                  value={item.quantity}
+                  onChange={event => {
+                    const next = [...formData.missingItems];
+                    next[index] = { ...next[index], quantity: Number(event.target.value || 1) };
+                    onMissingItemsChange(next);
+                  }}
+                />
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={item.fulfilled}
+                  onChange={event => {
+                    const next = [...formData.missingItems];
+                    next[index] = { ...next[index], fulfilled: event.target.checked };
+                    onMissingItemsChange(next);
+                  }}
+                />
+                Fulfilled
+              </label>
+              <button
+                type="button"
+                onClick={() => onMissingItemsChange(formData.missingItems.filter((_, itemIndex) => itemIndex !== index))}
+                style={smallButtonStyle}
+              >
+                Remove Item
+              </button>
+            </div>
+          ))
+        )}
+      </section>
+
       <FormField as="textarea" label="Internal Notes" name="internalNotes" value={formData.internalNotes} onChange={onChange} />
 
-      <button
-        type="submit"
-        style={{
-          width: 'fit-content',
-          padding: '10px 14px',
-          borderRadius: 8,
-          border: '1px solid #111827',
-          background: '#111827',
-          color: '#fff',
-          fontWeight: 600,
-          cursor: 'pointer'
-        }}
-      >
+      <button type="submit" style={primaryButtonStyle}>
         {submitLabel}
       </button>
     </form>
   );
 }
+
+const primaryButtonStyle = {
+  width: 'fit-content',
+  padding: '12px 16px',
+  borderRadius: 10,
+  border: '1px solid #111827',
+  background: '#111827',
+  color: '#fff',
+  fontWeight: 700,
+  cursor: 'pointer'
+};
+
+const smallButtonStyle = {
+  width: 'fit-content',
+  padding: '8px 12px',
+  borderRadius: 8,
+  border: '1px solid #d1d5db',
+  background: '#fff',
+  cursor: 'pointer',
+  fontWeight: 600
+};
 
 function FormField({ label, name, as, ...props }) {
   const Component = as === 'textarea' ? 'textarea' : 'input';
