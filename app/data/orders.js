@@ -84,7 +84,7 @@ export const orders = [
     club: 'Hastings United',
     team: '',
     orderType: 'Instore',
-    status: 'Ready to Collection',
+    status: 'Ready for Collection',
     boxType: 'Small Order',
     boxNumber: 1,
     personalisationDetails: 'Initials JM',
