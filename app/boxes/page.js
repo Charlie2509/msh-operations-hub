@@ -1,47 +1,38 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useMemo, useState } from 'react';
 import { BOX_TYPES } from '../data/orders';
-import { getOrders } from '../lib/storage';
+import { useHubData } from '../lib/use-hub-data';
+
+const groups = [
+  { label: 'Reserve Boxes 1–8', type: 'Reserve', numbers: BOX_TYPES.Reserve },
+  { label: 'Small Order Boxes 1–5', type: 'Small Order', numbers: BOX_TYPES['Small Order'] },
+  { label: 'Web Order Boxes 1–4', type: 'Web Order', numbers: BOX_TYPES['Web Order'] }
+];
 
 export default function BoxesPage() {
-  const [orders, setOrders] = useState([]);
-  const [selectedBox, setSelectedBox] = useState(null);
+  const { orders } = useHubData();
+  const [selected, setSelected] = useState({ type: 'Reserve', number: 1 });
 
-  useEffect(() => {
-    setOrders(getOrders());
-  }, []);
-
-  const boxGroups = [
-    { label: 'Reserve Boxes', type: 'Reserve', numbers: BOX_TYPES.Reserve },
-    { label: 'Small Orders', type: 'Small Order', numbers: BOX_TYPES['Small Order'] },
-    { label: 'Web Orders', type: 'Web Order', numbers: BOX_TYPES['Web Order'] }
-  ];
-
-  const selectedOrders = selectedBox
-    ? orders.filter(order => order.boxType === selectedBox.type && Number(order.boxNumber) === selectedBox.number)
-    : [];
+  const selectedOrders = useMemo(
+    () => orders.filter(order => order.boxType === selected.type && Number(order.boxNumber) === selected.number),
+    [orders, selected]
+  );
 
   return (
-    <main style={{ maxWidth: 980, margin: '0 auto', display: 'grid', gap: 14 }}>
-      <h1 style={{ margin: 0 }}>Box View</h1>
-      <p style={{ margin: 0, color: '#4b5563' }}>Tap a box to see which orders are physically inside.</p>
+    <main className="page-wrap">
+      <header className="page-head"><h1>Boxes</h1><p>Digital view of physical reserve, small, and web box workflow.</p></header>
 
-      {boxGroups.map(group => (
-        <section key={group.type} style={{ border: '1px solid #e5e7eb', borderRadius: 10, background: '#fff', padding: 12 }}>
-          <h2 style={{ marginTop: 0 }}>{group.label}</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8 }}>
+      {groups.map(group => (
+        <section className="card" key={group.type}>
+          <h2>{group.label}</h2>
+          <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))' }}>
             {group.numbers.map(number => {
-              const contained = orders.filter(order => order.boxType === group.type && Number(order.boxNumber) === number);
+              const count = orders.filter(order => order.boxType === group.type && Number(order.boxNumber) === number).length;
               return (
-                <button
-                  key={number}
-                  type="button"
-                  onClick={() => setSelectedBox({ type: group.type, number })}
-                  style={{ border: '1px solid #d1d5db', borderRadius: 10, padding: '14px 8px', background: '#fff', textAlign: 'left', cursor: 'pointer' }}
-                >
-                  <p style={{ margin: 0, fontWeight: 700 }}>{group.type} {number}</p>
-                  <p style={{ margin: '6px 0 0', fontSize: 13, color: '#6b7280' }}>{contained.length} order(s)</p>
+                <button key={number} className={`btn ${selected.type === group.type && selected.number === number ? 'primary' : ''}`} onClick={() => setSelected({ type: group.type, number })}>
+                  {group.type} {number} ({count})
                 </button>
               );
             })}
@@ -49,20 +40,14 @@ export default function BoxesPage() {
         </section>
       ))}
 
-      {selectedBox && (
-        <section style={{ border: '1px solid #111827', borderRadius: 10, background: '#fff', padding: 12 }}>
-          <h3 style={{ marginTop: 0 }}>{selectedBox.type} {selectedBox.number}</h3>
-          {selectedOrders.length === 0 ? (
-            <p style={{ margin: 0 }}>No orders in this box.</p>
-          ) : (
-            <ul style={{ margin: 0, paddingLeft: 18 }}>
-              {selectedOrders.map(order => (
-                <li key={order.id}>{order.orderNumber} · {order.customerName} · {order.status}</li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
+      <section className="card">
+        <h2>{selected.type} {selected.number}</h2>
+        {selectedOrders.length === 0 ? <p style={{ margin: 0 }}>No orders currently in this box.</p> : (
+          <ul className="status-list">
+            {selectedOrders.map(order => <li key={order.id}><Link href={`/orders/${order.id}`} style={{ fontWeight: 700 }}>{order.orderNumber}</Link> · {order.customerName} · {order.status}</li>)}
+          </ul>
+        )}
+      </section>
     </main>
   );
 }

@@ -13,12 +13,7 @@ export default function AddOrderPage() {
 
   const handleChange = event => {
     const { name, value } = event.target;
-
-    if (name === 'boxType') {
-      setFormData(prev => getInitialOrderForm({ ...prev, boxType: value }));
-      return;
-    }
-
+    if (name === 'boxType') return setFormData(prev => getInitialOrderForm({ ...prev, boxType: value }));
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
@@ -26,40 +21,15 @@ export default function AddOrderPage() {
     event.preventDefault();
     const newOrder = createOrder(formData);
     setCreatedOrderNumber(newOrder.orderNumber);
-    router.push(`/orders/${newOrder.id}`);
+    setTimeout(() => router.push(`/orders/${newOrder.id}`), 500);
   };
 
   return (
-    <main style={{ maxWidth: 900, margin: '0 auto' }}>
-      <header style={{ marginBottom: 16 }}>
-        <h1 style={{ marginBottom: 8 }}>Add Order</h1>
-        <p style={{ margin: 0, color: '#4b5563' }}>Create a new operational record and store it locally for V1 workflows.</p>
-      </header>
-
-      {createdOrderNumber && (
-        <p style={{ padding: 12, border: '1px solid #86efac', borderRadius: 8, background: '#f0fdf4' }}>
-          Saved {createdOrderNumber}.
-        </p>
-      )}
-
+    <main className="page-wrap">
+      <header className="page-head"><h1>Add Order</h1><p>Create a new order with delivery and production details in one flow.</p></header>
+      {createdOrderNumber ? <p className="card" style={{ margin: 0 }}>Saved {createdOrderNumber}. Opening order workspace…</p> : null}
       <OrderForm formData={formData} onChange={handleChange} onMissingItemsChange={next => setFormData(prev => ({ ...prev, missingItems: typeof next === 'function' ? next(prev.missingItems) : next }))} onSubmit={handleSubmit} submitLabel="Create Order" />
-
-      <div style={{ marginTop: 12 }}>
-        <Link
-          href="/orders"
-          style={{
-            display: 'inline-block',
-            padding: '10px 14px',
-            borderRadius: 8,
-            border: '1px solid #d1d5db',
-            textDecoration: 'none',
-            color: '#111827',
-            fontWeight: 600
-          }}
-        >
-          Back to Orders
-        </Link>
-      </div>
+      <Link href="/orders" className="btn" style={{ width: 'fit-content' }}>Back to Orders</Link>
     </main>
   );
 }
