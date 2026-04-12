@@ -1,6 +1,7 @@
 'use client';
 
 import { orders as seededOrders } from '../data/orders';
+import { normalizeOrder } from './order-utils';
 
 const ORDERS_KEY = 'msh_orders_v1';
 const DELIVERIES_KEY = 'msh_deliveries_v1';
@@ -15,19 +16,31 @@ function safeParse(value, fallback) {
   }
 }
 
+function normalizeOrdersCollection(rawOrders) {
+  return rawOrders.map((order, index) => normalizeOrder(order, index));
+}
+
+function persistOrders(orders) {
+  window.localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
+}
+
 export function getOrders() {
   if (!isBrowser) {
-    return seededOrders;
+    return normalizeOrdersCollection(seededOrders);
   }
 
   const stored = window.localStorage.getItem(ORDERS_KEY);
 
   if (!stored) {
-    window.localStorage.setItem(ORDERS_KEY, JSON.stringify(seededOrders));
-    return seededOrders;
+    const normalizedSeed = normalizeOrdersCollection(seededOrders);
+    persistOrders(normalizedSeed);
+    return normalizedSeed;
   }
 
-  return safeParse(stored, seededOrders);
+  const parsed = safeParse(stored, seededOrders);
+  const normalized = normalizeOrdersCollection(parsed);
+  persistOrders(normalized);
+  return normalized;
 }
 
 export function saveOrders(nextOrders) {
@@ -35,17 +48,20 @@ export function saveOrders(nextOrders) {
     return;
   }
 
-  window.localStorage.setItem(ORDERS_KEY, JSON.stringify(nextOrders));
+  persistOrders(normalizeOrdersCollection(nextOrders));
 }
 
 export function createOrder(orderInput) {
   const allOrders = getOrders();
-  const nextOrder = {
-    id: `local-${Date.now()}`,
-    createdAt: new Date().toISOString(),
-    ...orderInput,
-    boxNumber: Number(orderInput.boxNumber)
-  };
+  const nextOrder = normalizeOrder(
+    {
+      id: `local-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      ...orderInput,
+      boxNumber: Number(orderInput.boxNumber)
+    },
+    0
+  );
 
   const updated = [nextOrder, ...allOrders];
   saveOrders(updated);
@@ -56,11 +72,14 @@ export function updateOrder(orderId, updates) {
   const allOrders = getOrders();
   const updated = allOrders.map(order =>
     order.id === orderId
-      ? {
-          ...order,
-          ...updates,
-          boxNumber: Number(updates.boxNumber)
-        }
+      ? normalizeOrder(
+          {
+            ...order,
+            ...updates,
+            boxNumber: Number(updates.boxNumber ?? order.boxNumber)
+          },
+          0
+        )
       : order
   );
 
@@ -80,7 +99,18 @@ export function getDeliveries() {
     return [];
   }
 
-  return safeParse(stored, []);
+  const parsed = safeParse(stored, []);
+  return parsed.map(delivery => ({
+    ...delivery,
+    items: Array.isArray(delivery.items) ? delivery.items : []
+  }));
+}
+
+export function saveDeliveries(deliveries) {
+  if (!isBrowser) {
+    return;
+  }
+  window.localStorage.setItem(DELIVERIES_KEY, JSON.stringify(deliveries));
 }
 
 export function createDelivery(deliveryInput) {
@@ -88,10 +118,19 @@ export function createDelivery(deliveryInput) {
   const nextDelivery = {
     id: `delivery-${Date.now()}`,
     createdAt: new Date().toISOString(),
+    status: 'Unmatched',
+    items: [],
     ...deliveryInput
   };
 
   const updated = [nextDelivery, ...allDeliveries];
-  window.localStorage.setItem(DELIVERIES_KEY, JSON.stringify(updated));
+  saveDeliveries(updated);
   return nextDelivery;
+}
+
+export function updateDelivery(deliveryId, updates) {
+  const allDeliveries = getDeliveries();
+  const updated = allDeliveries.map(delivery => (delivery.id === deliveryId ? { ...delivery, ...updates } : delivery));
+  saveDeliveries(updated);
+  return updated.find(delivery => delivery.id === deliveryId) || null;
 }

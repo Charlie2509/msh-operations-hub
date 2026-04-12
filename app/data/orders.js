@@ -50,13 +50,14 @@ export const orders = [
     boxType: 'Web Order',
     boxNumber: 2,
     personalisationDetails: 'Badge + initials TH',
-    missingItems: '1 x red training top medium',
+    missingItems: [{ id: 'm-1001-1', name: 'Red training top', size: 'M', quantity: 1, fulfilled: false, receivedQuantity: 0 }],
     internalNotes: 'Badges and initials in stock. Waiting on one Macron garment.',
     customerPhone: '07400111222',
     customerEmail: 'tom@example.com',
     needsOrderingFromMacron: 'Yes',
     deliveryStatus: 'Partially Delivered',
-    paymentStatus: 'Paid'
+    paymentStatus: 'Paid',
+    deliveryTracking: []
   },
   {
     id: '1002',
@@ -69,13 +70,14 @@ export const orders = [
     boxType: 'Reserve',
     boxNumber: 4,
     personalisationDetails: 'Full squad numbers and badges',
-    missingItems: 'Awaiting full delivery',
+    missingItems: [{ id: 'm-1002-1', name: 'Full delivery', size: '', quantity: 1, fulfilled: false, receivedQuantity: 0 }],
     internalNotes: 'Artwork approved and paid. Split delivery expected.',
     customerPhone: '01323 555555',
     customerEmail: 'kitorders@eastbourneunited.example',
     needsOrderingFromMacron: 'Yes',
     deliveryStatus: 'Awaiting Delivery',
-    paymentStatus: 'Paid'
+    paymentStatus: 'Paid',
+    deliveryTracking: []
   },
   {
     id: '1003',
@@ -88,12 +90,13 @@ export const orders = [
     boxType: 'Small Order',
     boxNumber: 1,
     personalisationDetails: 'Initials JM',
-    missingItems: '',
+    missingItems: [],
     internalNotes: 'Ready for customer text once POS flow is finalised.',
     customerPhone: '07555123456',
     customerEmail: 'jake@example.com',
     needsOrderingFromMacron: 'No',
     deliveryStatus: 'Fully Delivered',
-    paymentStatus: 'Paid'
+    paymentStatus: 'Paid',
+    deliveryTracking: []
   }
 ];

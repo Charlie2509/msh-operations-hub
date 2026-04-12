@@ -9,7 +9,9 @@ const navLinks = [
   { href: '/', label: 'Dashboard' },
   { href: '/orders', label: 'Orders' },
   { href: '/orders/new', label: 'Add Order' },
-  { href: '/deliveries', label: 'Deliveries' }
+  { href: '/deliveries', label: 'Deliveries' },
+  { href: '/production', label: 'Production' },
+  { href: '/boxes', label: 'Boxes' }
 ];
 
 export default function RootLayout({ children }) {
@@ -30,8 +32,9 @@ export default function RootLayout({ children }) {
                     color: '#0f172a',
                     border: '1px solid #d1d5db',
                     borderRadius: 8,
-                    padding: '8px 10px',
-                    background: '#fff'
+                    padding: '10px 12px',
+                    background: '#fff',
+                    fontWeight: 700
                   }}
                 >
                   {link.label}

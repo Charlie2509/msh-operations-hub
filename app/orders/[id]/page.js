@@ -13,6 +13,15 @@ const cardStyle = {
   background: '#fff'
 };
 
+const quickStatuses = [
+  'Ordered from Macron',
+  'Awaiting Delivery',
+  'Fully Delivered',
+  'In Production',
+  'Ready to Dispatch',
+  'Completed'
+];
+
 export default function OrderDetail() {
   const params = useParams();
   const [order, setOrder] = useState(null);
@@ -47,6 +56,12 @@ export default function OrderDetail() {
     setIsEditing(false);
   };
 
+  const applyQuickStatus = status => {
+    const saved = updateOrder(params.id, { ...order, status });
+    setOrder(saved);
+    setFormData(getInitialOrderForm(saved));
+  };
+
   if (!order) {
     return (
       <main style={{ maxWidth: 900, margin: '0 auto' }}>
@@ -68,20 +83,45 @@ export default function OrderDetail() {
           type="button"
           onClick={() => setIsEditing(prev => !prev)}
           style={{
-            padding: '8px 12px',
+            padding: '10px 14px',
             border: '1px solid #d1d5db',
             borderRadius: 8,
             background: '#fff',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            fontWeight: 700
           }}
         >
           {isEditing ? 'Cancel Edit' : 'Edit Order'}
         </button>
       </header>
 
+      <section style={cardStyle}>
+        <h2 style={{ marginTop: 0 }}>Quick Actions</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
+          {quickStatuses.map(status => (
+            <button
+              key={status}
+              type="button"
+              onClick={() => applyQuickStatus(status)}
+              style={{
+                padding: '12px 10px',
+                borderRadius: 10,
+                border: order.status === status ? '2px solid #111827' : '1px solid #d1d5db',
+                background: order.status === status ? '#111827' : '#fff',
+                color: order.status === status ? '#fff' : '#111827',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              {status}
+            </button>
+          ))}
+        </div>
+      </section>
+
       {isEditing ? (
         <section style={cardStyle}>
-          <OrderForm formData={formData} onChange={handleChange} onSubmit={handleSubmit} submitLabel="Save Changes" />
+          <OrderForm formData={formData} onChange={handleChange} onMissingItemsChange={next => setFormData(prev => ({ ...prev, missingItems: typeof next === 'function' ? next(prev.missingItems) : next }))} onSubmit={handleSubmit} submitLabel="Save Changes" />
         </section>
       ) : (
         <>
@@ -109,8 +149,19 @@ export default function OrderDetail() {
           <section style={cardStyle}>
             <h2 style={{ marginTop: 0 }}>Production</h2>
             <p><strong>Personalisation:</strong> {order.personalisationDetails || '—'}</p>
-            <p><strong>Missing Items:</strong> {order.missingItems || '—'}</p>
             <p><strong>Internal Notes:</strong> {order.internalNotes || '—'}</p>
+            <h3 style={{ marginBottom: 8 }}>Missing Items</h3>
+            {order.missingItems.length === 0 ? (
+              <p style={{ margin: 0 }}>No missing items.</p>
+            ) : (
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {order.missingItems.map(item => (
+                  <li key={item.id}>
+                    {item.quantity}x {item.name} {item.size ? `(${item.size})` : ''} — {item.fulfilled ? 'Fulfilled' : 'Missing'}
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
 
           <section style={cardStyle}>

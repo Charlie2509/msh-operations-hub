@@ -42,7 +42,7 @@ export default function AddOrderPage() {
         </p>
       )}
 
-      <OrderForm formData={formData} onChange={handleChange} onSubmit={handleSubmit} submitLabel="Create Order" />
+      <OrderForm formData={formData} onChange={handleChange} onMissingItemsChange={next => setFormData(prev => ({ ...prev, missingItems: typeof next === 'function' ? next(prev.missingItems) : next }))} onSubmit={handleSubmit} submitLabel="Create Order" />
 
       <div style={{ marginTop: 12 }}>
         <Link
