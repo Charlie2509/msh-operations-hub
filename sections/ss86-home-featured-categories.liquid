@@ -1,0 +1,387 @@
+{% liquid
+  assign bg_class = ''
+  case section.settings.background_style
+    when 'warm'
+      assign bg_class = 'ss86-home-featured--warm'
+    when 'white'
+      assign bg_class = 'ss86-home-featured--white'
+    when 'soft-gray'
+      assign bg_class = 'ss86-home-featured--soft-gray'
+  endcase
+
+  assign tile_blocks = section.blocks | where: 'type', 'tile'
+  assign trust_blocks = section.blocks | where: 'type', 'trust_item'
+%}
+
+<section class="ss86-home-featured {{ bg_class }}" id="SS86HomeFeatured-{{ section.id }}">
+  <div class="page-width ss86-home-featured__inner">
+    <div class="ss86-home-featured__intro">
+      {% if section.settings.main_heading != blank %}
+        <h2 class="ss86-home-featured__heading">{{ section.settings.main_heading }}</h2>
+      {% endif %}
+      {% if section.settings.intro_text != blank %}
+        <div class="ss86-home-featured__copy rte">{{ section.settings.intro_text }}</div>
+      {% endif %}
+    </div>
+
+    {% if tile_blocks.size > 0 %}
+      <div class="ss86-home-featured__tiles" role="list">
+        {% for block in tile_blocks %}
+          {% liquid
+            assign heading = block.settings.title | default: 'Category'
+            assign cta_label = block.settings.cta_label | default: 'Explore'
+            assign tile_link = block.settings.link
+          %}
+          <article class="ss86-home-featured__tile" {{ block.shopify_attributes }} role="listitem">
+            {% if block.settings.image != blank %}
+              <div class="ss86-home-featured__tile-media">
+                {{ block.settings.image | image_url: width: 1200 | image_tag: loading: 'lazy', widths: '480, 720, 960, 1200', sizes: '(min-width: 990px) 33vw, 100vw', alt: heading }}
+              </div>
+            {% else %}
+              <div class="ss86-home-featured__tile-media ss86-home-featured__tile-media--placeholder" aria-hidden="true">
+                {{ 'collection-1' | placeholder_svg_tag: 'placeholder-svg' }}
+              </div>
+            {% endif %}
+
+            <div class="ss86-home-featured__tile-content">
+              <h3>{{ heading }}</h3>
+              {% if block.settings.description != blank %}
+                <p>{{ block.settings.description }}</p>
+              {% endif %}
+              {% if tile_link != blank %}
+                <a class="ss86-home-featured__cta" href="{{ tile_link }}">
+                  <span>{{ cta_label }}</span>
+                </a>
+              {% else %}
+                <span class="ss86-home-featured__cta ss86-home-featured__cta--disabled">{{ cta_label }}</span>
+              {% endif %}
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if trust_blocks.size > 0 %}
+      <ul class="ss86-home-featured__trust" role="list">
+        {% for block in trust_blocks %}
+          {% if block.settings.text != blank %}
+            <li class="ss86-home-featured__trust-item" {{ block.shopify_attributes }}>{{ block.settings.text }}</li>
+          {% endif %}
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+</section>
+
+<style>
+  #SS86HomeFeatured-{{ section.id }} {
+    --ss86-shadow: 0 20px 40px rgba(28, 28, 25, 0.08);
+    --ss86-radius: 1.5rem;
+    padding: clamp(2.5rem, 5vw, 5rem) 0;
+  }
+
+  #SS86HomeFeatured-{{ section.id }}.ss86-home-featured--white {
+    background: #ffffff;
+  }
+
+  #SS86HomeFeatured-{{ section.id }}.ss86-home-featured--warm {
+    background: linear-gradient(180deg, #fffefb 0%, #fbf8f2 100%);
+  }
+
+  #SS86HomeFeatured-{{ section.id }}.ss86-home-featured--soft-gray {
+    background: #f8f8f6;
+  }
+
+  #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__inner {
+    display: grid;
+    gap: clamp(1.75rem, 4vw, 2.75rem);
+  }
+
+  #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__intro {
+    max-width: 58rem;
+    margin: 0 auto;
+    text-align: center;
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__heading {
+    margin: 0;
+    font-size: clamp(1.45rem, 3.3vw, 2.3rem);
+    line-height: 1.25;
+    letter-spacing: 0.01em;
+  }
+
+  #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__copy {
+    margin: 0 auto;
+    max-width: 44rem;
+    color: rgba(28, 28, 25, 0.78);
+  }
+
+  #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__tiles {
+    display: grid;
+    gap: 1.2rem;
+    grid-template-columns: 1fr;
+  }
+
+  #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__tile {
+    position: relative;
+    border-radius: var(--ss86-radius);
+    overflow: hidden;
+    background: #fff;
+    box-shadow: var(--ss86-shadow);
+    min-height: clamp(20rem, 46vw, 28rem);
+    display: grid;
+    align-items: end;
+    isolation: isolate;
+  }
+
+  #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__tile-media {
+    position: absolute;
+    inset: 0;
+  }
+
+  #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__tile-media img,
+  #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__tile-media svg {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__tile-media--placeholder {
+    background: #efeee9;
+  }
+
+  #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__tile::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(20, 20, 18, 0.02) 20%, rgba(20, 20, 18, 0.68) 100%);
+    z-index: 1;
+  }
+
+  #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__tile-content {
+    position: relative;
+    z-index: 2;
+    color: #fff;
+    padding: clamp(1.2rem, 2.6vw, 1.8rem);
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__tile-content h3 {
+    margin: 0;
+    font-size: clamp(1.25rem, 2.2vw, 1.75rem);
+    line-height: 1.25;
+  }
+
+  #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__tile-content p {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__cta {
+    margin-top: 0.4rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: fit-content;
+    padding: 0.55rem 1rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.92);
+    color: #181816;
+    font-size: 0.92rem;
+    text-decoration: none;
+    transition: transform 0.2s ease, background-color 0.2s ease;
+  }
+
+  #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__cta:hover {
+    transform: translateY(-1px);
+    background: #fff;
+  }
+
+  #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__cta--disabled {
+    opacity: 0.85;
+    pointer-events: none;
+  }
+
+  #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__trust {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.6rem;
+    grid-template-columns: 1fr;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: 1rem;
+    padding: 1rem 1.2rem;
+  }
+
+  #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__trust-item {
+    color: rgba(28, 28, 25, 0.86);
+    font-size: 0.92rem;
+    line-height: 1.45;
+  }
+
+  @media screen and (min-width: 750px) {
+    #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__tiles {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1.35rem;
+    }
+
+    #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__trust {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.8rem 1.4rem;
+    }
+  }
+
+  @media screen and (min-width: 990px) {
+    #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__tiles {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    #SS86HomeFeatured-{{ section.id }} .ss86-home-featured__trust {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      padding-inline: 1.4rem;
+    }
+  }
+</style>
+
+{% schema %}
+{
+  "name": "SS86 featured categories",
+  "tag": "section",
+  "class": "section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "main_heading",
+      "label": "Main heading",
+      "default": "School Uniform · Workwear · Embroidery Specialists"
+    },
+    {
+      "type": "richtext",
+      "id": "intro_text",
+      "label": "Intro text",
+      "default": "<p>Premium uniform and workwear supply with local expertise in embroidery and print.</p>"
+    },
+    {
+      "type": "select",
+      "id": "background_style",
+      "label": "Background style",
+      "default": "warm",
+      "options": [
+        { "value": "warm", "label": "Soft warm" },
+        { "value": "white", "label": "White" },
+        { "value": "soft-gray", "label": "Soft gray" }
+      ]
+    }
+  ],
+  "blocks": [
+    {
+      "type": "tile",
+      "name": "Category tile",
+      "limit": 3,
+      "settings": [
+        {
+          "type": "image_picker",
+          "id": "image",
+          "label": "Tile image"
+        },
+        {
+          "type": "text",
+          "id": "title",
+          "label": "Tile title",
+          "default": "School Uniform"
+        },
+        {
+          "type": "text",
+          "id": "description",
+          "label": "Tile description",
+          "default": "Curated schoolwear from trusted brands, sized and ready for term."
+        },
+        {
+          "type": "url",
+          "id": "link",
+          "label": "Tile link"
+        },
+        {
+          "type": "text",
+          "id": "cta_label",
+          "label": "CTA label",
+          "default": "Find Your School"
+        }
+      ]
+    },
+    {
+      "type": "trust_item",
+      "name": "Trust strip item",
+      "limit": 4,
+      "settings": [
+        {
+          "type": "text",
+          "id": "text",
+          "label": "Item text",
+          "default": "Serving Hastings and surrounding areas"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "SS86 featured categories",
+      "blocks": [
+        {
+          "type": "tile",
+          "settings": {
+            "title": "School Uniform",
+            "description": "Smart, comfortable uniform essentials tailored for local schools.",
+            "cta_label": "Find Your School"
+          }
+        },
+        {
+          "type": "tile",
+          "settings": {
+            "title": "Workwear",
+            "description": "Professional workwear and branded clothing for every trade.",
+            "cta_label": "Shop Workwear"
+          }
+        },
+        {
+          "type": "tile",
+          "settings": {
+            "title": "Special Projects",
+            "description": "Flexible merchandise and embroidery support for clubs, teams, and events.",
+            "cta_label": "Explore Collections"
+          }
+        },
+        {
+          "type": "trust_item",
+          "settings": {
+            "text": "Serving Hastings and surrounding areas"
+          }
+        },
+        {
+          "type": "trust_item",
+          "settings": {
+            "text": "Fast delivery / Click & Collect"
+          }
+        },
+        {
+          "type": "trust_item",
+          "settings": {
+            "text": "Embroidery & Print Experts"
+          }
+        },
+        {
+          "type": "trust_item",
+          "settings": {
+            "text": "Local business specialists"
+          }
+        }
+      ]
+    }
+  ]
+}
+{% endschema %}
