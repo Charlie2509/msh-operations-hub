@@ -1,0 +1,54 @@
+name: Macron Gallery Extractor
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Run mode
+        required: true
+        default: diagnose
+        type: choice
+        options:
+          - extract
+          - diagnose
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run extractor/diagnostics
+        env:
+          MODE: ${{ inputs.mode }}
+          PRODUCT_LINKS: ${{ vars.MACRON_PRODUCT_LINKS }}
+          PRODUCT_LINKS_FILE: extracted_assets/product_links.txt
+          DIAGNOSE_MAX_LINKS: 5
+        run: |
+          if [ "${MODE}" = "diagnose" ]; then
+            npm run diagnose
+          else
+            npm run extract
+          fi
+
+      - name: Upload extracted assets artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macron-extracted-assets-${{ inputs.mode }}
+          path: |
+            extracted_assets/**/*
+          if-no-files-found: warn
