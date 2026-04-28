@@ -6,11 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "extract": "node scripts/macron-extractor.mjs extract",
+    "diagnose": "node scripts/macron-extractor.mjs diagnose"
   },
   "dependencies": {
     "next": "14.2.5",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "playwright": "^1.53.0"
   }
 }
