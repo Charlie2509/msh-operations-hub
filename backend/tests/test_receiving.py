@@ -2,7 +2,7 @@ from pathlib import Path
 
 from app import database
 from app.importers import box_code_from_linear_barcode, product_code_matches_barcode
-from app.main import ScanRequest, scan
+from app.main import CorrectionRequest, ScanRequest, correct_scan, receiving_session_summary, scan
 
 
 def _seed(tmp_path: Path):
@@ -64,3 +64,39 @@ def test_recognised_garment_in_wrong_box_is_refused(tmp_path):
     wrong = scan(ScanRequest(value='80000454090011', session_id=session_id))
     assert wrong['matched'] is False
     assert wrong['reason'] == 'wrong_box'
+
+
+def test_corrected_scan_reopens_quantity_and_keeps_audit(tmp_path):
+    session_id = _seed(tmp_path)
+    scan(ScanRequest(value='999990000003525414', session_id=session_id))
+    accepted = scan(ScanRequest(value='80000456090005', session_id=session_id))
+
+    correction = correct_scan(
+        accepted['scan_event_id'],
+        CorrectionRequest(reason='Garment was scanned twice while moving piles', corrected_by='Supervisor'),
+    )
+    assert correction['corrected'] is True
+
+    rescanned = scan(ScanRequest(value='80000456090005', session_id=session_id))
+    assert rescanned['accepted'] is True
+    assert rescanned['line_progress'] == {'scanned': 1, 'expected_in_box': 1}
+
+    with database.connect() as conn:
+        audit = conn.execute('SELECT * FROM scan_corrections WHERE scan_event_id=?', (accepted['scan_event_id'],)).fetchone()
+        assert audit['corrected_by'] == 'Supervisor'
+        assert 'scanned twice' in audit['reason']
+
+
+def test_session_summary_reports_box_completion(tmp_path):
+    session_id = _seed(tmp_path)
+    scan(ScanRequest(value='999990000003525414', session_id=session_id))
+    before = receiving_session_summary(session_id)
+    assert before['boxes_touched'] == 1
+    assert before['boxes_complete'] == 0
+    assert before['verified_items'] == 0
+
+    scan(ScanRequest(value='80000456090005', session_id=session_id))
+    after = receiving_session_summary(session_id)
+    assert after['verified_items'] == 1
+    assert after['boxes_complete'] == 1
+    assert after['shipments'][0]['delivery_number'] == 'TEST001'
