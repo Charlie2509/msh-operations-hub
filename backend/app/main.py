@@ -15,7 +15,7 @@ from .importers import (
 )
 from .shipment_parser import parse_packing_list
 
-app = FastAPI(title='MSH Ops API', version='0.3.0')
+app = FastAPI(title='MSH Ops API', version='0.4.0')
 
 allowed_origins = [x.strip() for x in os.getenv('MSH_ALLOWED_ORIGINS', 'http://localhost:5173').split(',') if x.strip()]
 app.add_middleware(
@@ -32,7 +32,7 @@ def startup():
 
 @app.get('/api/health')
 def health():
-    return {'ok': True, 'version': '0.3.0'}
+    return {'ok': True, 'version': '0.4.0'}
 
 @app.post('/api/orders/import-csv')
 async def upload_order_csv(file: UploadFile = File(...)):
@@ -62,7 +62,7 @@ async def import_shipment_url(body: UrlImport):
         async with httpx.AsyncClient(
             timeout=30,
             follow_redirects=True,
-            headers={'User-Agent': 'Mozilla/5.0 MSH-Ops/0.3'},
+            headers={'User-Agent': 'Mozilla/5.0 MSH-Ops/0.4'},
         ) as client:
             response = await client.get(body.url)
     except httpx.HTTPError as exc:
@@ -146,10 +146,74 @@ def get_receiving_session(session_id: int):
         if not session:
             raise HTTPException(status_code=404, detail='Receiving session not found')
         verified = conn.execute(
-            "SELECT COUNT(*) c FROM scan_events WHERE session_id=? AND scan_type='product' AND result='accepted'",
+            '''SELECT COUNT(*) c FROM scan_events se
+               WHERE se.session_id=? AND se.scan_type='product' AND se.result='accepted'
+               AND NOT EXISTS (SELECT 1 FROM scan_corrections sc WHERE sc.scan_event_id=se.id)''',
             (session_id,),
         ).fetchone()['c']
         return {**dict(session), 'verified_items': verified}
+
+@app.get('/api/receiving-sessions/{session_id}/summary')
+def receiving_session_summary(session_id: int):
+    with connect() as conn:
+        session = conn.execute('SELECT * FROM receiving_sessions WHERE id=?', (session_id,)).fetchone()
+        if not session:
+            raise HTTPException(status_code=404, detail='Receiving session not found')
+
+        verified = conn.execute(
+            '''SELECT COUNT(*) c FROM scan_events se
+               WHERE se.session_id=? AND se.scan_type='product' AND se.result='accepted'
+               AND NOT EXISTS (SELECT 1 FROM scan_corrections sc WHERE sc.scan_event_id=se.id)''',
+            (session_id,),
+        ).fetchone()['c']
+        corrections = conn.execute('SELECT COUNT(*) c FROM scan_corrections WHERE session_id=?', (session_id,)).fetchone()['c']
+        exceptions = conn.execute(
+            "SELECT COUNT(*) c FROM scan_events WHERE session_id=? AND result IN ('wrong_box','over_scan','ambiguous','unmatched')",
+            (session_id,),
+        ).fetchone()['c']
+
+        box_rows = conn.execute(
+            '''SELECT sb.id, sb.box_code, s.delivery_number,
+                      COALESCE((SELECT SUM(sl.quantity_shipped) FROM shipment_lines sl WHERE sl.box_id=sb.id),0) AS expected_items,
+                      COALESCE((SELECT COUNT(*) FROM scan_events se
+                                WHERE se.matched_box_id=sb.id AND se.scan_type='product' AND se.result='accepted'
+                                AND NOT EXISTS (SELECT 1 FROM scan_corrections sc WHERE sc.scan_event_id=se.id)),0) AS verified_items
+               FROM shipment_boxes sb
+               JOIN shipments s ON s.id=sb.shipment_id
+               WHERE sb.id IN (
+                   SELECT DISTINCT matched_box_id FROM scan_events
+                   WHERE session_id=? AND matched_box_id IS NOT NULL
+               )
+               ORDER BY s.delivery_number, sb.box_code''',
+            (session_id,),
+        ).fetchall()
+        boxes = []
+        for row in box_rows:
+            item = dict(row)
+            item['complete'] = item['verified_items'] >= item['expected_items'] and item['expected_items'] > 0
+            boxes.append(item)
+
+        shipments: dict[str, dict[str, int]] = {}
+        for box in boxes:
+            delivery = box['delivery_number']
+            shipments.setdefault(delivery, {'boxes_touched': 0, 'boxes_complete': 0, 'verified_items': 0, 'expected_items_in_touched_boxes': 0})
+            shipments[delivery]['boxes_touched'] += 1
+            shipments[delivery]['boxes_complete'] += 1 if box['complete'] else 0
+            shipments[delivery]['verified_items'] += box['verified_items']
+            shipments[delivery]['expected_items_in_touched_boxes'] += box['expected_items']
+
+        return {
+            'session_id': session_id,
+            'opened_at': session['opened_at'],
+            'closed_at': session['closed_at'],
+            'verified_items': verified,
+            'corrections': corrections,
+            'exceptions': exceptions,
+            'boxes_touched': len(boxes),
+            'boxes_complete': sum(1 for box in boxes if box['complete']),
+            'shipments': [{'delivery_number': key, **value} for key, value in shipments.items()],
+            'boxes': boxes,
+        }
 
 @app.post('/api/receiving-sessions/{session_id}/close')
 def close_receiving_session(session_id: int):
@@ -167,6 +231,10 @@ class ScanRequest(BaseModel):
     value: str
     session_id: int | None = None
 
+class CorrectionRequest(BaseModel):
+    reason: str
+    corrected_by: str | None = None
+
 def _require_open_session(conn, session_id: int | None):
     if session_id is None:
         return None
@@ -176,7 +244,7 @@ def _require_open_session(conn, session_id: int | None):
     return session
 
 def _log_scan(conn, **values: Any):
-    conn.execute(
+    cur = conn.execute(
         '''INSERT INTO scan_events(session_id, scan_type, raw_value, matched_order_id, matched_order_line_id, matched_box_id, matched_shipment_line_id, result)
            VALUES (?,?,?,?,?,?,?,?)''',
         (
@@ -184,6 +252,27 @@ def _log_scan(conn, **values: Any):
             values.get('matched_order_line_id'), values.get('matched_box_id'), values.get('matched_shipment_line_id'), values['result'],
         ),
     )
+    return cur.lastrowid
+
+@app.post('/api/scan-events/{scan_event_id}/correct')
+def correct_scan(scan_event_id: int, body: CorrectionRequest):
+    reason = body.reason.strip()
+    if len(reason) < 3:
+        raise HTTPException(status_code=400, detail='A correction reason is required')
+    with connect() as conn:
+        event = conn.execute('SELECT * FROM scan_events WHERE id=?', (scan_event_id,)).fetchone()
+        if not event:
+            raise HTTPException(status_code=404, detail='Scan event not found')
+        if event['scan_type'] != 'product' or event['result'] != 'accepted':
+            raise HTTPException(status_code=409, detail='Only accepted garment scans can be corrected')
+        if conn.execute('SELECT 1 FROM scan_corrections WHERE scan_event_id=?', (scan_event_id,)).fetchone():
+            raise HTTPException(status_code=409, detail='This scan has already been corrected')
+        conn.execute(
+            'INSERT INTO scan_corrections(scan_event_id, session_id, reason, corrected_by) VALUES (?,?,?,?)',
+            (scan_event_id, event['session_id'], reason, body.corrected_by),
+        )
+        conn.commit()
+        return {'corrected': True, 'scan_event_id': scan_event_id, 'reason': reason}
 
 @app.post('/api/scan')
 def scan(req: ScanRequest):
@@ -242,7 +331,9 @@ def _allocate_product_in_active_box(conn, session_id: int, box_id: int, barcode:
     rows = conn.execute(
         '''SELECT sl.id AS shipment_line_id, sl.quantity_shipped, sl.product_code, sl.size, sl.description, sl.macron_order_id,
                   o.id AS order_id, o.reference_note, ol.id AS order_line_id, ol.barcode, ol.name,
-                  (SELECT COUNT(*) FROM scan_events se WHERE se.matched_shipment_line_id=sl.id AND se.result='accepted') AS already_scanned
+                  (SELECT COUNT(*) FROM scan_events se
+                   WHERE se.matched_shipment_line_id=sl.id AND se.result='accepted'
+                   AND NOT EXISTS (SELECT 1 FROM scan_corrections sc WHERE sc.scan_event_id=se.id)) AS already_scanned
            FROM shipment_lines sl
            JOIN orders o ON o.macron_order_id=sl.macron_order_id
            JOIN order_lines ol ON ol.order_id=o.id AND ol.barcode=?
@@ -253,26 +344,26 @@ def _allocate_product_in_active_box(conn, session_id: int, box_id: int, barcode:
     available = [row for row in candidates if row['already_scanned'] < row['quantity_shipped']]
     if not available:
         result = 'over_scan' if candidates else 'wrong_box'
-        _log_scan(conn, session_id=session_id, scan_type='product', raw_value=barcode, matched_box_id=box_id, result=result)
+        event_id = _log_scan(conn, session_id=session_id, scan_type='product', raw_value=barcode, matched_box_id=box_id, result=result)
         return {
-            'kind': 'product', 'matched': False, 'reason': result,
+            'kind': 'product', 'matched': False, 'reason': result, 'scan_event_id': event_id,
             'message': 'This item has already reached the quantity Macron says is in this box.' if result == 'over_scan' else 'This barcode is not expected in the active Macron box.',
         }
     if len(available) > 1:
-        _log_scan(conn, session_id=session_id, scan_type='product', raw_value=barcode, matched_box_id=box_id, result='ambiguous')
+        event_id = _log_scan(conn, session_id=session_id, scan_type='product', raw_value=barcode, matched_box_id=box_id, result='ambiguous')
         return {
-            'kind': 'product', 'matched': False, 'reason': 'ambiguous',
+            'kind': 'product', 'matched': False, 'reason': 'ambiguous', 'scan_event_id': event_id,
             'message': 'More than one valid allocation remains. The system has refused to guess.',
         }
     chosen = available[0]
     new_count = chosen['already_scanned'] + 1
-    _log_scan(
+    event_id = _log_scan(
         conn, session_id=session_id, scan_type='product', raw_value=barcode,
         matched_order_id=chosen['order_id'], matched_order_line_id=chosen['order_line_id'], matched_box_id=box_id,
         matched_shipment_line_id=chosen['shipment_line_id'], result='accepted',
     )
     return {
-        'kind': 'product', 'matched': True, 'accepted': True,
+        'kind': 'product', 'matched': True, 'accepted': True, 'scan_event_id': event_id,
         'order_id': chosen['order_id'], 'macron_order_id': chosen['macron_order_id'], 'reference_note': chosen['reference_note'],
         'product_code': chosen['product_code'], 'name': chosen['name'] or chosen['description'], 'size': chosen['size'], 'box_id': box_id,
         'line_progress': {'scanned': new_count, 'expected_in_box': chosen['quantity_shipped']},
@@ -287,7 +378,15 @@ def dashboard():
             'shipments': conn.execute('SELECT COUNT(*) c FROM shipments').fetchone()['c'],
             'boxes': conn.execute('SELECT COUNT(*) c FROM shipment_boxes').fetchone()['c'],
             'received_boxes': conn.execute('SELECT COUNT(*) c FROM shipment_boxes WHERE first_received_at IS NOT NULL').fetchone()['c'],
-            'verified_items': conn.execute("SELECT COUNT(*) c FROM scan_events WHERE scan_type='product' AND result='accepted'").fetchone()['c'],
+            'verified_items': conn.execute(
+                '''SELECT COUNT(*) c FROM scan_events se WHERE se.scan_type='product' AND se.result='accepted'
+                   AND NOT EXISTS (SELECT 1 FROM scan_corrections sc WHERE sc.scan_event_id=se.id)'''
+            ).fetchone()['c'],
+            'corrections': conn.execute('SELECT COUNT(*) c FROM scan_corrections').fetchone()['c'],
         }
-        recent = [dict(r) for r in conn.execute('SELECT * FROM scan_events ORDER BY id DESC LIMIT 10').fetchall()]
+        recent = [dict(r) for r in conn.execute(
+            '''SELECT se.*, sc.reason AS correction_reason, sc.corrected_by
+               FROM scan_events se LEFT JOIN scan_corrections sc ON sc.scan_event_id=se.id
+               ORDER BY se.id DESC LIMIT 10'''
+        ).fetchall()]
     return {**counts, 'recent_scans': recent}
