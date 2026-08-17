@@ -13,6 +13,7 @@ function App() {
   const [result, setResult] = useState<ScanResult | null>(null)
   const [status, setStatus] = useState<any>(null)
   const [session, setSession] = useState<any>(null)
+  const [summary, setSummary] = useState<any>(null)
   const [busy, setBusy] = useState(false)
   const [cameraOpen, setCameraOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -22,6 +23,7 @@ function App() {
     try { setStatus(await (await fetch(`${API}/api/dashboard`)).json()) } catch {}
     if (sessionId) {
       try { setSession(await (await fetch(`${API}/api/receiving-sessions/${sessionId}`)).json()) } catch {}
+      try { setSummary(await (await fetch(`${API}/api/receiving-sessions/${sessionId}/summary`)).json()) } catch {}
     }
   }
 
@@ -33,15 +35,54 @@ function App() {
     })
     const data = await r.json()
     setSession(data)
+    setSummary(null)
     setResult({kind:'session_started'})
+    await refresh(data.id)
     setTimeout(()=>inputRef.current?.focus(), 0)
+  }
+
+  const closeSession = async () => {
+    if (!session?.id) return
+    setBusy(true)
+    try {
+      await refresh(session.id)
+      const r = await fetch(`${API}/api/receiving-sessions/${session.id}/close`, {method:'POST'})
+      const data = await r.json()
+      if (!r.ok) throw new Error(data.detail || 'Could not close receiving session')
+      setResult({kind:'session_closed'})
+      await refresh(session.id)
+    } catch (e:any) {
+      setResult({kind:'error', message:e.message})
+    } finally { setBusy(false) }
+  }
+
+  const correctLastScan = async () => {
+    if (!result?.scan_event_id || !result?.accepted) return
+    const reason = window.prompt('Why are you undoing this garment scan?')?.trim()
+    if (!reason) return
+    setBusy(true)
+    try {
+      const r = await fetch(`${API}/api/scan-events/${result.scan_event_id}/correct`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({reason, corrected_by:'MSH staff'})
+      })
+      const data = await r.json()
+      if (!r.ok) throw new Error(data.detail || 'Could not correct scan')
+      setResult({kind:'corrected', message:'The scan was removed from received quantities but kept in the audit trail.'})
+      await refresh(session?.id)
+    } catch (e:any) {
+      setResult({kind:'error', message:e.message})
+    } finally {
+      setBusy(false)
+      setTimeout(()=>inputRef.current?.focus(), 0)
+    }
   }
 
   const submitScan = async (value = scan) => {
     const v = value.trim()
     if (!v) return
-    if (!session?.id) {
-      setResult({kind:'error', message:'Start a receiving session first.'})
+    if (!session?.id || session.closed_at) {
+      setResult({kind:'error', message:'Start an open receiving session first.'})
       return
     }
     setBusy(true)
@@ -71,8 +112,8 @@ function App() {
   }
 
   const scanQrWithCamera = async () => {
-    if (!session?.id) {
-      setResult({kind:'error', message:'Start a receiving session first.'})
+    if (!session?.id || session.closed_at) {
+      setResult({kind:'error', message:'Start an open receiving session first.'})
       return
     }
     setCameraOpen(true)
@@ -108,12 +149,15 @@ function App() {
   const card = (() => {
     if (!result) return <div className="empty">Start receiving, scan a Macron QR to load the shipment, scan the physical box barcode, then scan garments.</div>
     if (result.kind === 'session_started') return <div className="result good"><b>Receiving session started</b><span>Use the phone camera for Macron's square QR, then use the Bluetooth scanner for box and garment barcodes.</span></div>
+    if (result.kind === 'session_closed') return <div className="result good"><b>Receiving session closed</b><span>The summary remains available below for checking before the goods move on.</span></div>
+    if (result.kind === 'corrected') return <div className="result warn"><b>Scan corrected</b><span>{result.message}</span></div>
     if (result.kind === 'product' && result.accepted) {
       return <div className="result good allocation">
         <span className="eyebrow">PUT INTO ORDER</span>
         <b>{result.reference_note || `Macron order ${result.macron_order_id}`}</b>
         <span>{result.name} · {result.size}</span>
         <span className="progress">This box: {result.line_progress.scanned}/{result.line_progress.expected_in_box}</span>
+        <button className="undoButton" onClick={correctLastScan} disabled={busy}>Undo this scan</button>
       </div>
     }
     if (result.kind === 'product' && result.needs_box) return <div className="result warn"><b>Scan the box first</b><span>{result.message}</span></div>
@@ -135,7 +179,7 @@ function App() {
 
     {tab==='receive' ? <section className="receive">
       <div className="hero"><h1>Scan & sort</h1><p>A DHL arrival can contain several Macron shipments. MSH Ops keeps the shipment, box and order relationships separate automatically.</p></div>
-      {!session?.id ? <button className="primary big" onClick={startSession}>Start receiving</button> : <>
+      {!session?.id || session.closed_at ? <button className="primary big" onClick={startSession}>Start receiving</button> : <>
         <div className="sessionLine"><span>Session #{session.id} · {session.verified_items ?? 0} verified</span><b>{session.active_box_code ? `Active: ${session.active_box_code}` : 'No active box'}</b></div>
         <button className="cameraButton" onClick={scanQrWithCamera} disabled={busy}>Scan Macron QR with phone camera</button>
         {cameraOpen && <div className="camera"><video ref={videoRef} /></div>}
@@ -146,6 +190,18 @@ function App() {
         <p className="hint">For garments, aim the scanner at the lower Macron barcode such as <b>80000456090005</b>, not the retail EAN above it.</p>
       </>}
       {card}
+
+      {summary && <div className="summaryCard">
+        <div className="summaryHead"><div><span className="eyebrow">RECEIVING PROGRESS</span><h2>{summary.verified_items} garments verified</h2></div><div>{summary.boxes_complete}/{summary.boxes_touched} touched boxes complete</div></div>
+        <div className="summaryGrid">
+          <div><b>{summary.shipments?.length ?? 0}</b><span>Macron shipments</span></div>
+          <div><b>{summary.corrections ?? 0}</b><span>Corrections</span></div>
+          <div><b>{summary.exceptions ?? 0}</b><span>Exceptions</span></div>
+        </div>
+        {summary.boxes?.length > 0 && <div className="boxList">{summary.boxes.map((box:any)=><div className="boxRow" key={box.id}><div><b>{box.box_code}</b><span>{box.delivery_number}</span></div><div className={box.complete?'done':'open'}>{box.verified_items}/{box.expected_items}</div></div>)}</div>}
+        {session?.id && !session.closed_at && <button className="secondary big" onClick={closeSession} disabled={busy}>Finish this DHL arrival</button>}
+      </div>}
+
       <div className="stats">
         <div><b>{status?.orders ?? 0}</b><span>Orders</span></div>
         <div><b>{status?.shipments ?? 0}</b><span>Shipments</span></div>
