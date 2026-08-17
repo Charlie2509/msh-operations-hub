@@ -82,11 +82,21 @@ CREATE TABLE IF NOT EXISTS scan_events (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS scan_corrections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scan_event_id INTEGER NOT NULL UNIQUE REFERENCES scan_events(id) ON DELETE CASCADE,
+    session_id INTEGER REFERENCES receiving_sessions(id) ON DELETE SET NULL,
+    reason TEXT NOT NULL,
+    corrected_by TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_order_lines_barcode ON order_lines(barcode);
 CREATE INDEX IF NOT EXISTS idx_shipment_lines_box ON shipment_lines(box_id);
 CREATE INDEX IF NOT EXISTS idx_shipment_lines_order ON shipment_lines(macron_order_id);
 CREATE INDEX IF NOT EXISTS idx_scan_events_session ON scan_events(session_id);
 CREATE INDEX IF NOT EXISTS idx_scan_events_alloc ON scan_events(matched_shipment_line_id, result);
+CREATE INDEX IF NOT EXISTS idx_scan_corrections_session ON scan_corrections(session_id);
 '''
 
 
